@@ -1,0 +1,125 @@
+#!/bin/bash
+#
+# tarball2appimage by LinuxDicasPro
+#
+####################################
+
+
+destdir=~/__APPIMAGE__
+test -e "../_APPIMAGE" && destdir="../_APPIMAGE" # Opcional
+
+
+###########################################
+
+arch="x86_64"
+prg="AnyDesk"
+link="https://anydesk.com/pt/downloads/linux"
+
+###########################################
+
+
+for i in {1..35}; { printf '─'; }; printf "\n"
+printf "Search latest version: "
+
+
+########
+
+version="$(grep -Eom1 "([0-9]+[.])+[0-9]+" <(grep -EA1 "v[0-9]" <(links -dump "$link")))"
+
+########
+
+
+printf "\033[1;32m$version\033[m\n"
+for i in {1..35}; { printf '─'; }; printf "\n"
+
+
+test -z "$version" && {
+    echo "update script. version not found!"
+    exit 1
+}
+
+set -e
+
+test ! -e $destdir && mkdir -p $destdir
+cd $destdir
+
+
+test -e "$prg-$version-$arch.AppImage" && {
+    echo "appimage found!"
+    exit 0
+}
+
+
+test ! -e "appimagetool-x86_64.AppImage" && {
+    link_tool="https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+    wget -c -q --show-progress "$link_tool"
+    chmod +x "appimagetool-x86_64.AppImage"
+}
+
+
+#########
+
+link_prg="https://download.anydesk.com/linux/anydesk-${version}-amd64.tar.gz"
+
+#########
+
+
+wget -c -q --show-progress "$link_prg"
+file_prg=${link_prg##*/}
+
+cwd=$PWD
+
+rm -rf "$prg.AppDir"
+mkdir -p "$prg.AppDir"
+cd "$prg.AppDir"
+
+echo -e "\nextract $file_prg ..."
+printf "$file_prg\t["
+tar -zxf "$cwd/$file_prg" --checkpoint=50 --checkpoint-action=exec='printf ='
+echo -e "]\n"
+
+cp anydesk-*/anydesk* .
+cp anydesk-*/icons/hicolor/scalable/apps/anydesk.svg .
+
+####################################
+
+appimage_name="AnyDesk"
+pr="anydesk"
+
+####################################
+
+echo "#!/bin/bash
+
+cd \$APPDIR
+desktopfile=~/.local/share/applications/$pr.desktop
+iconfile=~/.local/share/pixmaps/$pr.svg
+
+test ! -e \"\$desktopfile\" && cp $pr.desktop ~/.local/share/applications/
+test ! -e \"\$iconfile\" && cp $pr.svg ~/.local/share/pixmaps/
+
+if ! grep -q \"\$APPIMAGE\" \"\$desktopfile\"; then
+    sed -i \"s:Exec=.*:Exec=\$APPIMAGE:\" \"\$desktopfile\"
+    sed -i \"s:Icon=.*:Icon=\$iconfile:\" \"\$desktopfile\"
+    /usr/bin/update-desktop-database -q || true
+    test -e usr/share/icons/hicolor/icon-theme.cache && {
+        test -x /usr/bin/gtk-update-icon-cache && /usr/bin/gtk-update-icon-cache ~/.local/share/pixmaps/ 2>&1 >&- || true
+    }
+fi
+
+./$pr" > AppRun
+
+chmod +x AppRun
+cd ..
+
+printf "\n"; for ((i=0; i<$COLUMNS; i++)); { printf '─'; }; echo -e "\n"
+
+env ARCH=$arch ./appimagetool-x86_64.AppImage "$prg.AppDir"
+mv "${appimage_name// /_}-$arch.AppImage" "$prg-$version-$arch.AppImage"
+
+printf "\n"; for ((i=0; i<$COLUMNS; i++)); { printf '─'; }; echo -e "\n"
+
+rm -rf "$prg.AppDir"
+cd ..
+
+echo "appimage saved in $destdir/$prg-$version-$arch.AppImage"
+exit 0
